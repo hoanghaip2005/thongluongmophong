@@ -1,0 +1,35 @@
+Cơ sở lý thuyết
+Frame Slotted ALOHA (FSA) là một giao thức truy cập bội ngẫu nhiên (random multiple access) nhằm giải quyết vấn đề xung đột trong kênh truyền dùng chung. Cơ sở của nó dựa trên hai nguyên tắc chính:
+1.	Phân khe thời gian (Time Slotting): Tương tự như Slotted ALOHA, kênh truyền được chia thành các khe thời gian (slots) có độ dài bằng thời gian truyền một gói tin. Các thiết bị phải đồng bộ và chỉ được phép bắt đầu truyền tại điểm bắt đầu của một khe. Điều này giảm "cửa sổ xung đột" xuống một nửa so với ALOHA thuần túy.
+2.	Phân khung (Framing): Đây là cải tiến cốt lõi so với Slotted ALOHA. Các khe thời gian được nhóm lại thành các khung (frames) có độ dài cố định N khe. Một thiết bị có dữ liệu để gửi sẽ chỉ chọn ngẫu nhiên một trong N khe của khung tiếp theo để truyền. Việc này giới hạn số lượng thiết bị tranh chấp trong một khoảng thời gian xác định, giúp kiểm soát và dự đoán xác suất xung đột tốt hơn.
+Quá trình truyền dữ liệu
+Quá trình truyền một gói tin của một thiết bị (node) diễn ra theo các bước sau:
+1.	Sẵn sàng gửi: Thiết bị có một gói tin trong bộ đệm và sẵn sàng để truyền.
+2.	Chờ khung tiếp theo: Thiết bị chờ cho đến khi khung (frame) tiếp theo bắt đầu.
+3.	Chọn khe ngẫu nhiên: Thiết bị chọn một số nguyên ngẫu nhiên k trong khoảng [1, N], trong đó N là tổng số khe trong một khung.
+4.	Truyền dữ liệu: Tại thời điểm bắt đầu của khe thứ k trong khung đó, thiết bị truyền toàn bộ gói tin của mình.
+5.	Chờ xác nhận (Acknowledgement - ACK):
+o	Thành công: Nếu thiết bị nhận được ACK từ máy thu, quá trình truyền gói tin đó kết thúc thành công.
+o	Thất bại (Xung đột hoặc Lỗi): Nếu thiết bị không nhận được ACK sau một khoảng thời gian chờ (timeout), nó sẽ giả định rằng gói tin đã bị xung đột (collision) với gói tin từ một thiết bị khác chọn cùng khe k.
+6.	Truyền lại (Retransmission): Trong trường hợp thất bại, thiết bị sẽ lặp lại quy trình từ Bước 2, tức là chờ khung tiếp theo và chọn lại một khe ngẫu nhiên mới để truyền lại gói tin.
+Công thức tính toán
+Các công thức này là nền tảng để phân tích hiệu suất của giao thức. Giả sử có M thiết bị đang cùng tranh chấp N khe trong một khung.
+1. Tải trọng đầu vào (Offered Load - G)
+Tải trọng là số lượng gói tin trung bình được các thiết bị cố gắng truyền đi trong một khe thời gian.
+G=M/N
+•	G < 1: Số lượng thiết bị ít hơn số khe. Xác suất xung đột thấp.
+•	G = 1: Số lượng thiết bị bằng số khe. Đây là điểm tải trọng tối ưu.
+•	G > 1: Số lượng thiết bị nhiều hơn số khe. Xác suất xung đột cao.
+2. Thông lượng (Throughput - S)
+Thông lượng là số lượng gói tin trung bình được truyền đi thành công trong một khe thời gian. Công thức xấp xỉ của thông lượng được tính dựa trên phân phối Poisson khi M và N lớn:
+S=G⋅e−G
+Trong đó:
+•	S là thông lượng.
+•	G là tải trọng đầu vào.
+•	e là cơ số của logarit tự nhiên (xấp xỉ 2.718).
+Term e^{-G} biểu diễn xác suất để một khe thời gian cụ thể chỉ có đúng một gói tin được truyền vào (tức là thành công).
+3. Thông lượng cực đại (Maximum Throughput)
+Thông lượng của hệ thống đạt giá trị cực đại khi đạo hàm của S theo G bằng 0, tức là tại điểm G = 1.
+Smax=1⋅e−1≈0.368
+Điều này có nghĩa là, trong điều kiện hoạt động tốt nhất, chỉ có khoảng 36.8% số khe được sử dụng hiệu quả để truyền dữ liệu thành công. Phần còn lại là các khe bị xung đột hoặc các khe bị bỏ trống.
+

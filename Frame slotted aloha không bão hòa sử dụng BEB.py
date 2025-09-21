@@ -43,6 +43,7 @@ def run_fsa_beb_simulation(arrival_rate_lambda, num_nodes, frame_length, num_fra
     total_successful_packets = 0
     total_dropped_packets = 0
     total_new_packets = 0
+    total_attempted_transmissions = 0  # Đếm tổng số lần cố gắng truyền
 
     # Bắt đầu vòng lặp mô phỏng qua từng khung
     for frame in range(num_frames):
@@ -79,6 +80,7 @@ def run_fsa_beb_simulation(arrival_rate_lambda, num_nodes, frame_length, num_fra
             chosen_slot = np.random.randint(0, frame_length)
             slot_usage[chosen_slot] += 1
             node_to_slot_map[node_idx] = chosen_slot
+            total_attempted_transmissions += 1  # Đếm mỗi lần cố gắng truyền
 
         # 4. XỬ LÝ KẾT QUẢ VÀ ÁP DỤNG BEB
         for node_idx, chosen_slot in node_to_slot_map.items():
@@ -107,10 +109,15 @@ def run_fsa_beb_simulation(arrival_rate_lambda, num_nodes, frame_length, num_fra
                     nodes[node_idx]['backoff_counter'] = backoff_frames
 
     # 5. TÍNH TOÁN KẾT QUẢ CUỐI CÙNG
+    # Thông lượng chuẩn hóa theo định nghĩa lý thuyết: số gói thành công / tổng số khe
     normalized_throughput = total_successful_packets / (num_frames * frame_length)
+    
+    # Offered load thực tế từ mô phỏng (để so sánh)
+    actual_offered_load = total_attempted_transmissions / (num_frames * frame_length)
+    
     packet_drop_rate = total_dropped_packets / total_new_packets if total_new_packets > 0 else 0
 
-    return normalized_throughput, packet_drop_rate
+    return normalized_throughput, packet_drop_rate, actual_offered_load
 
 # ==============================================================================
 # THAM SỐ MÔ PHỎNG
@@ -125,7 +132,8 @@ ARRIVAL_RATES = np.linspace(0.1, FRAME_LENGTH * 2.5, 40)
 # CHẠY MÔ PHỎNG VÀ THU THẬP KẾT QUẢ
 # ==============================================================================
 throughputs_beb = []
-drop_rates_beb =[]
+drop_rates_beb = []
+actual_loads = []  # Lưu offered load thực tế từ mô phỏng
 
 start_time = time.time()
 print("Bắt đầu mô phỏng FSA với BEB...")
@@ -135,9 +143,10 @@ print("-" * 60)
 
 for rate in ARRIVAL_RATES:
     print(f"Đang mô phỏng với Tải trọng cung cấp (λ) = {rate:.2f} gói/khung...")
-    throughput, drop_rate = run_fsa_beb_simulation(rate, NUM_NODES, FRAME_LENGTH, NUM_FRAMES)
+    throughput, drop_rate, actual_load = run_fsa_beb_simulation(rate, NUM_NODES, FRAME_LENGTH, NUM_FRAMES)
     throughputs_beb.append(throughput)
     drop_rates_beb.append(drop_rate)
+    actual_loads.append(actual_load)
 
 end_time = time.time()
 print("-" * 60)
@@ -146,43 +155,79 @@ print(f"Mô phỏng hoàn tất sau {end_time - start_time:.2f} giây.")
 # ==============================================================================
 # TÍNH TOÁN THÔNG LƯỢNG LÝ THUYẾT (S = G * e^-G)
 # ==============================================================================
-# Tính G (tải trọng cung cấp trên mỗi khe)
-# G = λ/L, trong đó λ là tốc độ đến trung bình của gói tin mới trên toàn hệ thống
+# Theo lý thuyết FSA: G là số lượng gói tin trung bình được cố gắng truyền đi trong 1 khe thời gian
+# G = tổng gói tin cố gắng truyền / tổng số khe
+# Với arrival rate λ (gói/khung), trong 1 khung có L khe, thì G = λ/L
 offered_load_G = ARRIVAL_RATES / FRAME_LENGTH
-
-# Tính thông lượng lý thuyết
 theoretical_throughputs = offered_load_G * np.exp(-offered_load_G)
-
-# Chuẩn hóa thông lượng thực tế theo số khe thời gian
-actual_throughputs = np.array(throughputs_beb)
 
 # ==============================================================================
 # VẼ ĐỒ THỊ KẾT QUẢ
 # ==============================================================================
 plt.style.use('seaborn-v0_8-whitegrid')
-fig, ax1 = plt.subplots(figsize=(14, 8))
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 8))
 
-# Trục y1 cho Thông lượng
-ax1.set_xlabel('Offered Load G (λ/L)', fontsize=12)
-ax1.set_ylabel('Normalized Throughput (S)', fontsize=12, color='royalblue')
-ax1.plot(offered_load_G, actual_throughputs, 'o-', color='royalblue', 
-         label=f'Simulation FSA-BEB (N={NUM_NODES}, L={FRAME_LENGTH})')
-ax1.plot(offered_load_G, theoretical_throughputs, '--', color='red', 
-         label='Theory (S = G * e^-G)')
-ax1.tick_params(axis='y', labelcolor='royalblue')
-ax1.set_ylim(bottom=0, top=max(max(actual_throughputs), max(theoretical_throughputs)) * 1.1)
-ax1.set_xlim(left=0)
+# Đồ thị 1: So sánh Throughput với lý thuyết
+ax1.set_xlabel('Offered Load G (packets/slot)', fontsize=12)
+ax1.set_ylabel('Throughput S', fontsize=12, color='royalblue')
 
-# Trục y2 cho Tỷ lệ rớt gói
-'''ax2 = ax1.twinx()
-ax2.set_ylabel('Tỷ lệ rớt gói (Packet Drop Rate)', fontsize=12, color='seagreen')
-ax2.plot(ARRIVAL_RATES, drop_rates_beb, 's--', color='seagreen', markersize=5, label='Tỷ lệ rớt gói (BEB)')
-ax2.tick_params(axis='y', labelcolor='seagreen')
-ax2.set_ylim(bottom=0, top=1.0)'''
+# Vẽ đường cong mô phỏng theo offered load thực tế
+ax1.plot(actual_loads, throughputs_beb, 'o-', color='royalblue', 
+         label=f'FSA-BEB Simulation (N={NUM_NODES}, L={FRAME_LENGTH})', markersize=4)
 
-# Tiêu đề và chú giải
-fig.suptitle('Frame Slotted ALOHA with BEB', fontsize=16, y=0.95)
-fig.legend(loc='upper right', bbox_to_anchor=(0.9, 0.9))
-ax1.grid(True)
+# Vẽ đường cong lý thuyết
+G_theory = np.linspace(0.01, 3, 100)
+S_theory = G_theory * np.exp(-G_theory)
+ax1.plot(G_theory, S_theory, '--', color='red', linewidth=2, label='Theory: S = G × e^(-G)')
 
+# Đánh dấu điểm tối ưu lý thuyết (G=1, S≈0.368)
+ax1.axvline(x=1, color='green', linestyle=':', alpha=0.7, label='Optimal G = 1')
+ax1.axhline(y=1/np.e, color='green', linestyle=':', alpha=0.7, label='Max S ≈ 0.368')
+
+ax1.set_xlim([0, 2.5])
+ax1.set_ylim([0, 0.4])
+ax1.legend(fontsize=10)
+ax1.grid(True, alpha=0.3)
+ax1.set_title('Throughput vs Offered Load', fontsize=14)
+
+# Đồ thị 2: Throughput và Drop rate theo Arrival rate
+ax2.set_xlabel('λ (packets/frame)', fontsize=12)
+ax2.set_ylabel('Throughput', fontsize=12, color='royalblue')
+ax2.plot(ARRIVAL_RATES, throughputs_beb, 'o-', color='royalblue', label='Throughput')
+ax2.tick_params(axis='y', labelcolor='royalblue')
+ax2.set_ylim([0, 0.4])
+
+# Trục y2 cho Packet Drop Rate
+ax2_twin = ax2.twinx()
+ax2_twin.set_ylabel('Packet Drop Rate', fontsize=12, color='seagreen')
+ax2_twin.plot(ARRIVAL_RATES, drop_rates_beb, 's--', color='seagreen', 
+              markersize=5, alpha=0.7, label='Drop Rate')
+ax2_twin.tick_params(axis='y', labelcolor='seagreen')
+ax2_twin.set_ylim([0, 1])
+
+ax2.set_title('Performance vs Arrival Rate', fontsize=14)
+ax2.grid(True, alpha=0.3)
+
+# Tổng hợp legend cho đồ thị 2
+lines1, labels1 = ax2.get_legend_handles_labels()
+lines2, labels2 = ax2_twin.get_legend_handles_labels()
+ax2.legend(lines1 + lines2, labels1 + labels2, loc='upper right')
+
+plt.tight_layout()
+plt.suptitle('Frame Slotted ALOHA with Binary Exponential Backoff Analysis', 
+             fontsize=16, y=0.98)
+
+# Lưu đồ thị và hiển thị
+plt.savefig('FSA_BEB_Analysis.png', dpi=300, bbox_inches='tight')
+print("Đồ thị đã được lưu vào file: FSA_BEB_Analysis.png")
 plt.show()
+
+print("\n" + "="*70)
+print("THÔNG TIN PHÂN TÍCH:")
+print("="*70)
+print(f"Throughput tối đa đạt được: {max(throughputs_beb):.4f}")
+max_idx = np.argmax(throughputs_beb)
+print(f"Tại arrival rate λ = {ARRIVAL_RATES[max_idx]:.2f} packets/frame")
+print(f"Offered load G thực tế = {actual_loads[max_idx]:.4f}")
+print(f"Lý thuyết tối ưu: G = 1.0, S_max ≈ {1/np.e:.4f}")
+print("="*70)
